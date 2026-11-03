@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JSON Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --surface2: #eef0f5;
+      --border: #d0d5e3;
+      --text: #1e2235;
+      --text-muted: #8b93b0;
+      --accent: #3b6ff5;
+      --green: #1a7f37;
+      --red: #cf222e;
+      --yellow: #9a6700;
+      --purple: #6f42c1;
+      --cyan: #0969da;
+      --orange: #bc4c00;
+      --font-mono: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.5px;
+    }
+
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 5px 10px;
+      gap: 6px;
+    }
+
+    .search-box input {
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 13px;
+      width: 180px;
+    }
+
+    .search-box input::placeholder { color: var(--text-muted); }
+
+    .search-icon { color: var(--text-muted); font-size: 12px; }
+
+    .search-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 40px;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { background: var(--border); border-color: var(--text-muted); }
+    .btn.primary { background: #7da4f8; color: #ffffff; border-color: #7da4f8; font-weight: 600; }
+    .btn.primary:hover { background: #5f8df6; border-color: #5f8df6; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Main layout */
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Input panel */
+    .panel-input {
+      width: 360px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .panel-header .actions { display: flex; gap: 6px; }
+
+    #json-input {
+      flex: 1;
+      resize: none;
+      border: none;
+      outline: none;
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 14px;
+      tab-size: 2;
+    }
+
+    #json-input::placeholder { color: var(--text-muted); }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .status-dot.ok { background: var(--green); }
+    .status-dot.error { background: var(--red); }
+
+    #status-text { color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #status-text.error { color: var(--red); }
+
+    /* Output panel */
+    .panel-output {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .output-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .output-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-right: auto;
+    }
+
+    #tree-container {
+      flex: 1;
+      overflow: auto;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 10px;
+      color: var(--text-muted);
+    }
+
+    .empty-state .icon { font-size: 40px; }
+    .empty-state p { font-size: 14px; }
+
+    /* Tree nodes */
+    .tree-node { position: relative; }
+
+    .node-line {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      padding: 1px 0;
+      border-radius: 4px;
+      cursor: default;
+      padding-right: 8px;
+    }
+
+    .node-line:hover { background: rgba(59, 111, 245, 0.07); }
+    .node-line.highlighted { background: rgba(154, 103, 0, 0.12); }
+
+    .toggle-btn {
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 3px;
+      flex-shrink: 0;
+      font-size: 10px;
+      color: var(--text-muted);
+      user-select: none;
+      transition: color 0.15s;
+    }
+
+    .toggle-btn:hover { color: var(--accent); }
+    .toggle-btn.leaf { cursor: default; color: transparent; pointer-events: none; }
+
+    .node-key {
+      color: var(--cyan);
+      flex-shrink: 0;
+    }
+
+    .node-key.array-idx { color: var(--text-muted); }
+
+    .colon { color: var(--text-muted); flex-shrink: 0; }
+
+    .node-value { word-break: break-all; }
+    .node-value.string { color: var(--green); }
+    .node-value.number { color: var(--orange); }
+    .node-value.boolean { color: var(--purple); }
+    .node-value.null { color: var(--text-muted); font-style: italic; }
+
+    .node-bracket { color: var(--text-muted); }
+
+    .node-children {
+      padding-left: 20px;
+      border-left: 1px solid var(--border);
+      margin-left: 8px;
+    }
+
+    .node-children.collapsed { display: none; }
+
+    .node-summary {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-left: 4px;
+      cursor: pointer;
+    }
+
+    .node-summary:hover { color: var(--accent); }
+
+    .copy-val {
+      opacity: 0;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      margin-left: 4px;
+      transition: opacity 0.1s, color 0.1s;
+      flex-shrink: 0;
+    }
+
+    .node-line:hover .copy-val { opacity: 1; }
+    .copy-val:hover { color: var(--accent); }
+
+    /* Resizer */
+    .resizer {
+      width: 4px;
+      background: transparent;
+      cursor: col-resize;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+      transition: background 0.15s;
+    }
+
+    .resizer:hover, .resizer.dragging { background: var(--accent); }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 9px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      transform: translateY(60px);
+      opacity: 0;
+      transition: all 0.2s;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* Path bar */
+    #path-bar {
+      padding: 5px 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      min-height: 26px;
+      transition: color 0.1s;
+      flex-shrink: 0;
+    }
+
+    #path-bar.active { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ JSON Viewer</h1>
+  <div class="header-actions">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input id="search-input" type="text" placeholder="키 또는 값 검색..." />
+      <span class="search-count" id="search-count"></span>
+    </div>
+    <button class="btn" id="btn-expand">모두 펼치기</button>
+    <button class="btn" id="btn-collapse">모두 접기</button>
+  </div>
+</header>
+
+<main>
+  <div class="panel-input" id="panel-input">
+    <div class="panel-header">
+      입력
+      <div class="actions">
+        <button class="btn" id="btn-sample">예시</button>
+        <button class="btn" id="btn-clear">지우기</button>
+      </div>
+    </div>
+    <textarea id="json-input" placeholder="여기에 JSON을 붙여넣으세요...&#10;&#10;Ctrl+Enter 로 파싱"></textarea>
+    <div class="status-bar">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">JSON을 입력하세요</span>
+    </div>
+  </div>
+
+  <div class="resizer" id="resizer"></div>
+
+  <div class="panel-output">
+    <div class="output-toolbar">
+      <span class="output-label">트리 뷰</span>
+      <button class="btn" id="btn-format">포맷</button>
+      <button class="btn" id="btn-minify">압축</button>
+      <button class="btn primary" id="btn-copy-all">전체 복사</button>
+    </div>
+    <div id="path-bar"></div>
+    <div id="tree-container">
+      <div class="empty-state">
+        <div class="icon">{ }</div>
+        <p>왼쪽에 JSON을 붙여넣으면<br>여기에 트리로 표시됩니다</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+  const inputEl = document.getElementById('json-input');
+  const treeEl = document.getElementById('tree-container');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const searchInput = document.getElementById('search-input');
+  const searchCount = document.getElementById('search-count');
+  const pathBar = document.getElementById('path-bar');
+
+  let parsedData = null;
+  let searchMatches = [];
+  let searchIdx = 0;
+
+  // ── Parse & Render ──────────────────────────────────────────────────────────
+  function tryParse(text) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setStatus('', 'idle');
+      renderEmpty();
+      parsedData = null;
+      return;
+    }
+    try {
+      parsedData = JSON.parse(trimmed);
+      const info = getInfo(parsedData);
+      setStatus(`유효한 JSON · ${info}`, 'ok');
+      renderTree(parsedData);
+      runSearch();
+    } catch (e) {
+      parsedData = null;
+      setStatus(e.message, 'error');
+      renderEmpty('올바르지 않은 JSON입니다');
+    }
+  }
+
+  function getInfo(data) {
+    if (Array.isArray(data)) return `배열 · ${data.length}개 항목`;
+    if (data !== null && typeof data === 'object') {
+      const keys = Object.keys(data).length;
+      return `객체 · ${keys}개 키`;
+    }
+    return typeof data;
+  }
+
+  function setStatus(msg, state) {
+    statusText.textContent = msg || 'JSON을 입력하세요';
+    statusText.className = state === 'error' ? 'error' : '';
+    statusDot.className = 'status-dot' + (state === 'ok' ? ' ok' : state === 'error' ? ' error' : '');
+  }
+
+  function renderEmpty(msg) {
+    treeEl.innerHTML = `<div class="empty-state"><div class="icon">{ }</div><p>${msg || '왼쪽에 JSON을 붙여넣으면<br>여기에 트리로 표시됩니다'}</p></div>`;
+  }
+
+  // ── Tree Builder ────────────────────────────────────────────────────────────
+  function renderTree(data) {
+    treeEl.innerHTML = '';
+    treeEl.appendChild(buildNode(data, null, '', true));
+  }
+
+  function buildNode(value, key, path, isRoot) {
+    const node = document.createElement('div');
+    node.className = 'tree-node';
+
+    const isObj = value !== null && typeof value === 'object';
+    const isArr = Array.isArray(value);
+    const childCount = isObj ? (isArr ? value.length : Object.keys(value).length) : 0;
+    const hasChildren = isObj && childCount > 0;
+
+    const line = document.createElement('div');
+    line.className = 'node-line';
+    line.dataset.path = path;
+
+    // hover → path bar
+    line.addEventListener('mouseenter', () => {
+      pathBar.textContent = path || 'root';
+      pathBar.className = 'active';
+    });
+    line.addEventListener('mouseleave', () => {
+      pathBar.textContent = '';
+      pathBar.className = '';
+    });
+
+    // Toggle button
+    const toggle = document.createElement('span');
+    toggle.className = 'toggle-btn' + (hasChildren ? '' : ' leaf');
+    toggle.textContent = hasChildren ? '▾' : '';
+    line.appendChild(toggle);
+
+    // Key
+    if (key !== null) {
+      const keyEl = document.createElement('span');
+      keyEl.className = 'node-key' + (typeof key === 'number' ? ' array-idx' : '');
+      keyEl.textContent = typeof key === 'number' ? `${key}` : `"${key}"`;
+      line.appendChild(keyEl);
+
+      const colon = document.createElement('span');
+      colon.className = 'colon';
+      colon.textContent = ':';
+      line.appendChild(colon);
+    }
+
+    if (isObj) {
+      // Opening bracket
+      const openBracket = document.createElement('span');
+      openBracket.className = 'node-bracket';
+      openBracket.textContent = isArr ? '[' : '{';
+      line.appendChild(openBracket);
+
+      if (hasChildren) {
+        const summary = document.createElement('span');
+        summary.className = 'node-summary';
+        summary.textContent = isArr ? `${childCount} items` : `${childCount} keys`;
+        summary.title = '클릭하여 토글';
+        line.appendChild(summary);
+        summary.addEventListener('click', () => doToggle());
+      } else {
+        const closeBracket = document.createElement('span');
+        closeBracket.className = 'node-bracket';
+        closeBracket.textContent = isArr ? ']' : '}';
+        line.appendChild(closeBracket);
+      }
+    } else {
+      // Primitive value
+      const valEl = document.createElement('span');
+      valEl.className = 'node-value ' + (value === null ? 'null' : typeof value);
+      if (typeof value === 'string') {
+        valEl.textContent = `"${value}"`;
+        valEl.dataset.raw = value;
+      } else {
+        valEl.textContent = String(value);
+        valEl.dataset.raw = String(value);
+      }
+      valEl.dataset.searchable = 'true';
+      line.appendChild(valEl);
+
+      // Copy value button
+      const copyBtn = document.createElement('span');
+      copyBtn.className = 'copy-val';
+      copyBtn.textContent = 'copy';
+      copyBtn.title = '값 복사';
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyToClipboard(typeof value === 'string' ? value : String(value));
+      });
+      line.appendChild(copyBtn);
+    }
+
+    node.appendChild(line);
+
+    if (hasChildren) {
+      const children = document.createElement('div');
+      children.className = 'node-children';
+
+      const entries = isArr ? value.map((v, i) => [i, v]) : Object.entries(value);
+      entries.forEach(([k, v]) => {
+        const childPath = isArr ? `${path}[${k}]` : `${path}${path ? '.' : ''}${k}`;
+        children.appendChild(buildNode(v, k, childPath, false));
+      });
+
+      // Closing bracket line
+      const closeLine = document.createElement('div');
+      closeLine.className = 'node-line';
+      const closeBracket = document.createElement('span');
+      closeBracket.className = 'toggle-btn leaf';
+      closeLine.appendChild(closeBracket);
+      const closeVal = document.createElement('span');
+      closeVal.className = 'node-bracket';
+      closeVal.textContent = isArr ? ']' : '}';
+      closeLine.appendChild(closeVal);
+      children.appendChild(closeLine);
+
+      node.appendChild(children);
+
+      // Toggle logic
+      let collapsed = false;
+      const doToggle = () => {
+        collapsed = !collapsed;
+        children.classList.toggle('collapsed', collapsed);
+        toggle.textContent = collapsed ? '▸' : '▾';
+        toggle.style.color = collapsed ? 'var(--accent)' : '';
+        // Hide summary when expanded, show when collapsed
+        const summary = line.querySelector('.node-summary');
+        if (summary) summary.style.display = collapsed ? 'inline' : 'inline';
+      };
+
+      toggle.addEventListener('click', doToggle);
+      line.addEventListener('click', (e) => {
+        if (e.target === line || e.target === openBracket) doToggle();
+      });
+    }
+
+    return node;
+  }
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+  function runSearch() {
+    const q = searchInput.value.trim().toLowerCase();
+    searchMatches = [];
+
+    // Clear previous highlights
+    treeEl.querySelectorAll('.node-line.highlighted').forEach(el => el.classList.remove('highlighted'));
+
+    if (!q || !parsedData) {
+      searchCount.textContent = '';
+      return;
+    }
+
+    treeEl.querySelectorAll('.node-line').forEach(line => {
+      const keyEl = line.querySelector('.node-key');
+      const valEl = line.querySelector('.node-value');
+
+      const keyMatch = keyEl && keyEl.textContent.toLowerCase().includes(q);
+      const valMatch = valEl && valEl.textContent.toLowerCase().includes(q);
+
+      if (keyMatch || valMatch) {
+        line.classList.add('highlighted');
+        searchMatches.push(line);
+        // Expand parents
+        let parent = line.parentElement;
+        while (parent && parent !== treeEl) {
+          if (parent.classList.contains('node-children') && parent.classList.contains('collapsed')) {
+            parent.classList.remove('collapsed');
+            const toggleBtn = parent.previousSibling?.querySelector?.('.toggle-btn');
+            if (toggleBtn) toggleBtn.textContent = '▾';
+          }
+          parent = parent.parentElement;
+        }
+      }
+    });
+
+    searchCount.textContent = searchMatches.length ? `${searchMatches.length}개` : '없음';
+    if (searchMatches.length) {
+      searchIdx = 0;
+      searchMatches[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  // ── Expand / Collapse All ───────────────────────────────────────────────────
+  function expandAll() {
+    treeEl.querySelectorAll('.node-children').forEach(el => {
+      el.classList.remove('collapsed');
+    });
+    treeEl.querySelectorAll('.toggle-btn:not(.leaf)').forEach(el => {
+      el.textContent = '▾';
+      el.style.color = '';
+    });
+  }
+
+  function collapseAll() {
+    treeEl.querySelectorAll('.node-children').forEach(el => {
+      el.classList.add('collapsed');
+    });
+    treeEl.querySelectorAll('.toggle-btn:not(.leaf)').forEach(el => {
+      el.textContent = '▸';
+      el.style.color = 'var(--accent)';
+    });
+  }
+
+  // ── Clipboard ───────────────────────────────────────────────────────────────
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => showToast('클립보드에 복사됨')).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast('클립보드에 복사됨');
+    });
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  // ── Resizer ─────────────────────────────────────────────────────────────────
+  const resizer = document.getElementById('resizer');
+  const panelInput = document.getElementById('panel-input');
+  let isResizing = false;
+
+  resizer.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    const mainRect = document.querySelector('main').getBoundingClientRect();
+    const newWidth = Math.max(200, Math.min(700, e.clientX - mainRect.left));
+    panelInput.style.width = newWidth + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isResizing) {
+      isResizing = false;
+      resizer.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+
+  // ── Event Listeners ─────────────────────────────────────────────────────────
+  inputEl.addEventListener('input', () => tryParse(inputEl.value));
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) tryParse(inputEl.value);
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const s = inputEl.selectionStart, end = inputEl.selectionEnd;
+      inputEl.value = inputEl.value.substring(0, s) + '  ' + inputEl.value.substring(end);
+      inputEl.selectionStart = inputEl.selectionEnd = s + 2;
+    }
+  });
+
+  // Paste auto-format
+  inputEl.addEventListener('paste', (e) => {
+    setTimeout(() => tryParse(inputEl.value), 10);
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    inputEl.value = '';
+    tryParse('');
+  });
+
+  document.getElementById('btn-sample').addEventListener('click', () => {
+    const sample = {
+      "name": "홍길동",
+      "age": 30,
+      "isActive": true,
+      "score": null,
+      "address": {
+        "city": "서울",
+        "district": "강남구",
+        "zipCode": "06234"
+      },
+      "tags": ["개발자", "백엔드", "풀스택"],
+      "projects": [
+        { "id": 1, "title": "쇼핑몰 API", "status": "완료", "rating": 4.8 },
+        { "id": 2, "title": "대시보드", "status": "진행중", "rating": null }
+      ],
+      "metadata": {
+        "createdAt": "2024-01-15T09:00:00Z",
+        "updatedAt": "2024-11-03T14:30:00Z",
+        "version": 3
+      }
+    };
+    inputEl.value = JSON.stringify(sample, null, 2);
+    tryParse(inputEl.value);
+  });
+
+  document.getElementById('btn-format').addEventListener('click', () => {
+    if (!parsedData) return;
+    inputEl.value = JSON.stringify(parsedData, null, 2);
+    showToast('포맷 완료');
+  });
+
+  document.getElementById('btn-minify').addEventListener('click', () => {
+    if (!parsedData) return;
+    inputEl.value = JSON.stringify(parsedData);
+    showToast('압축 완료');
+  });
+
+  document.getElementById('btn-copy-all').addEventListener('click', () => {
+    if (!parsedData) return;
+    copyToClipboard(JSON.stringify(parsedData, null, 2));
+  });
+
+  document.getElementById('btn-expand').addEventListener('click', expandAll);
+  document.getElementById('btn-collapse').addEventListener('click', collapseAll);
+
+  searchInput.addEventListener('input', runSearch);
+  searchInput.addEventListener('keydown', (e) => {
+    if (!searchMatches.length) return;
+    if (e.key === 'Enter') {
+      searchIdx = (searchIdx + 1) % searchMatches.length;
+      searchMatches[searchIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  });
+</script>
+</body>
+</html>
